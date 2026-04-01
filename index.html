@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Screenshot AI Report • Claude Sonnet</title>
+  <title>EW AI Insights</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1a1a1a">
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
   <script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script>
   <style>
@@ -51,7 +53,7 @@
       justify-content: center;
       align-items: center;
       padding: 0 14px;
-      gap: 5px;
+      gap: 4px;
     }
 
     .sec-label {
@@ -90,7 +92,7 @@
       font-weight: 700;
       padding: 0 18px;
       min-width: 110px;
-      height: 72px;
+      height: 68px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -99,7 +101,7 @@
       border-radius: 5px;
     }
     .btn-big:hover:not(:disabled) { background: var(--green-h); }
-    .btn-big span { font-size: 20px; }
+    .btn-big span { font-size: 18px; }
 
     /* ── FOLDER SECTION ─────────────────────────────────────── */
     #folder-name {
@@ -113,11 +115,14 @@
     }
     #folder-name.ok { color: var(--green); }
 
-    #prompt-status {
+    .mini-status {
       font-size: 9px;
       color: var(--fg2);
       text-align: center;
       max-width: 155px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .row { display: flex; align-items: center; gap: 6px; }
@@ -127,7 +132,6 @@
       width: 8px; height: 8px;
       border-radius: 50%;
       background: var(--btn);
-      display: inline-block;
       flex-shrink: 0;
     }
     .dot.live { background: var(--green); animation: pulse 1.5s infinite; }
@@ -170,17 +174,17 @@
       padding: 2px 3px;
       overflow: hidden;
     }
-    .q-cell.filled {
-      background: #1e3a1e;
-      color: var(--green);
-      font-weight: 600;
-    }
+    .q-cell.filled { background: #1e3a1e; color: var(--green); font-weight: 600; }
 
-    #status {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--blue);
-      white-space: nowrap;
+    #status { font-size: 12px; font-weight: 700; color: var(--blue); white-space: nowrap; }
+
+    /* ── INSTALL BUTTON ─────────────────────────────────────── */
+    #btn-install {
+      display: none;
+      font-size: 9px;
+      padding: 3px 8px;
+      background: #2a2a1a;
+      color: var(--orange);
     }
 
     /* ── API KEY PANEL ──────────────────────────────────────── */
@@ -200,7 +204,6 @@
       box-shadow: 0 4px 20px rgba(0,0,0,.6);
     }
     #api-panel.open { display: flex; }
-
     #api-panel input {
       background: var(--bg);
       color: var(--fg);
@@ -212,12 +215,7 @@
       width: 100%;
     }
     #api-panel input:focus { outline: 1px solid var(--blue); }
-
-    .api-note {
-      font-size: 10px;
-      color: var(--fg2);
-      line-height: 1.6;
-    }
+    .api-note { font-size: 10px; color: var(--fg2); line-height: 1.6; }
 
     /* ── COMPAT ERROR ───────────────────────────────────────── */
     #compat-error {
@@ -235,7 +233,7 @@
     }
     #compat-error.show { display: flex; }
     #compat-error h2 { color: var(--orange); font-size: 20px; }
-    #compat-error p  { color: var(--fg2); max-width: 420px; line-height: 1.6; }
+    #compat-error p  { color: var(--fg2); max-width: 440px; line-height: 1.6; }
 
     #spacer { height: var(--bar-h); }
   </style>
@@ -250,17 +248,18 @@
   <!-- 1. PROJECT FOLDER -->
   <div class="section" style="min-width:165px;">
     <span class="sec-label">📁 Project Folder</span>
-    <button id="btn-folder" onclick="selectFolder()" style="width:145px;">Select Folder</button>
+    <button id="btn-folder" style="width:145px;">Select Folder</button>
     <div id="folder-name">Not selected</div>
-    <div id="prompt-status">Prompts: select folder</div>
-    <div class="row" style="margin-top:2px;">
+    <div id="prompt-status" class="mini-status">Prompts: select folder</div>
+    <div id="key-status"    class="mini-status">Key: not set</div>
+    <div class="row" style="margin-top:1px;">
       <label class="row" style="font-size:10px; color:var(--fg2); cursor:pointer; gap:4px;">
-        <input type="checkbox" id="chk-compress" onchange="savePrefs()"> Compress
+        <input type="checkbox" id="chk-compress"> Compress
       </label>
-      <button onclick="toggleApiPanel()"
-              style="font-size:9px; padding:3px 8px; background:#26263a; color:#90CAF9;">
+      <button id="btn-api-key" style="font-size:9px; padding:3px 8px; background:#26263a; color:#90CAF9;">
         🔑 API Key
       </button>
+      <button id="btn-install">📌 Install App</button>
     </div>
   </div>
 
@@ -268,11 +267,11 @@
 
   <!-- 2. SCREENSHOT -->
   <div class="section">
-    <div class="row" style="margin-bottom:5px;">
+    <div class="row" style="margin-bottom:4px;">
       <div class="dot" id="cap-dot"></div>
       <span id="cap-label" style="font-size:9px; color:var(--fg2);">No capture</span>
     </div>
-    <button class="btn-big" id="btn-shot" onclick="takeScreenshot()" disabled>
+    <button class="btn-big" id="btn-shot" disabled>
       <span>📷</span>SCREENSHOT
     </button>
   </div>
@@ -283,8 +282,8 @@
   <div id="queue-section">
     <div class="queue-header">
       <span class="sec-label">📸 Screenshot Queue</span>
-      <button id="btn-send"   onclick="sendToAI()"             disabled style="font-size:10px;">📤 Send to AI</button>
-      <button id="btn-delete" onclick="deleteLastScreenshot()" disabled style="font-size:10px;">🗑 Delete Last</button>
+      <button id="btn-send"   disabled style="font-size:10px;">📤 Send to AI</button>
+      <button id="btn-delete" disabled style="font-size:10px;">🗑 Delete Last</button>
       <span id="status">Ready</span>
     </div>
     <div id="queue-grid"></div>
@@ -295,7 +294,7 @@
   <!-- 4. FINAL REPORT -->
   <div class="section">
     <span class="sec-label">🎯 Consolidate</span>
-    <button class="btn-big" id="btn-final" onclick="generateFinalReport()" disabled>
+    <button class="btn-big" id="btn-final" disabled>
       <span>📊</span>FINAL REPORT
     </button>
   </div>
@@ -307,20 +306,20 @@
 <!-- ══════════════════════════════════════════════════════════ -->
 <div id="api-panel">
   <span class="sec-label">Anthropic API Key</span>
-  <input type="password" id="api-input" placeholder="sk-ant-api03-..."
-         autocomplete="off" onkeydown="if(event.key==='Enter') saveApiKey()">
+  <input type="password" id="api-input" placeholder="sk-ant-api03-..." autocomplete="off">
   <div class="row">
-    <button onclick="saveApiKey()" style="flex:1; background:#1e3a1e; color:var(--green);">Save</button>
-    <button onclick="toggleApiPanel()" style="flex:1;">Cancel</button>
+    <button id="btn-save-key" style="flex:1; background:#1e3a1e; color:var(--green);">Save</button>
+    <button id="btn-cancel-key" style="flex:1;">Cancel</button>
   </div>
   <p class="api-note">
     Stored in your browser's localStorage only.<br>
-    Sent exclusively to <code>api.anthropic.com</code> — never to any server.
+    Better: add <code>ANTHROPIC_API_KEY=sk-ant-...</code> to a <code>.env</code> file
+    in your project folder and it will load automatically.
   </p>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
-<!-- BROWSER COMPAT ERROR                                      -->
+<!-- COMPAT ERROR                                              -->
 <!-- ══════════════════════════════════════════════════════════ -->
 <div id="compat-error">
   <h2>⚠️ Browser Not Supported</h2>
@@ -331,14 +330,14 @@
 <div id="spacer"></div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
-<!-- SCRIPT                                                    -->
+<!-- SCRIPT (ES module — required for Anthropic SDK import)   -->
 <!-- ══════════════════════════════════════════════════════════ -->
-<script>
+<script type="module">
 'use strict';
 
+import Anthropic from 'https://esm.sh/@anthropic-ai/sdk';
+
 // ── PROMPTS (loaded from project folder at runtime) ──────────────────────────
-// The app reads prompt_system.txt, prompt_batch.txt, prompt_final_report.txt
-// from the selected project folder. Nothing sensitive is hardcoded here.
 
 let SYSTEM_PROMPT       = '';
 let BATCH_PROMPT        = '';
@@ -356,7 +355,7 @@ async function loadPrompts(handle) {
       const fh   = await handle.getFileHandle(filename);
       const file = await fh.getFile();
       loaded[key] = (await file.text()).trim();
-    } catch { /* file not present */ }
+    } catch { /* file not in folder */ }
   }
 
   SYSTEM_PROMPT       = loaded.system      || '';
@@ -370,19 +369,41 @@ async function loadPrompts(handle) {
     el.style.color = 'var(--green)';
   } else {
     const missing = Object.entries(files)
-      .filter(([k]) => !loaded[k])
-      .map(([, v]) => v)
-      .join(', ');
+      .filter(([k]) => !loaded[k]).map(([, v]) => v).join(', ');
     el.textContent = `⚠ Missing: ${missing}`;
     el.style.color = 'var(--orange)';
   }
+}
+
+// ── ENV / API KEY (loaded from .env in project folder) ───────────────────────
+
+async function loadEnv(handle) {
+  try {
+    const fh   = await handle.getFileHandle('.env');
+    const file = await fh.getFile();
+    const text = await file.text();
+    const match = text.match(/ANTHROPIC_API_KEY\s*=\s*["']?([^\s"']+)["']?/);
+    if (match?.[1]) {
+      apiKey = match[1].trim();
+      localStorage.setItem('ew-api-key', apiKey);
+      setKeyStatus('✓ Key from .env', 'var(--green)');
+      return true;
+    }
+  } catch { /* .env not found */ }
+  return false;
+}
+
+function setKeyStatus(text, color) {
+  const el = document.getElementById('key-status');
+  el.textContent = text;
+  el.style.color = color;
 }
 
 // ── STATE ────────────────────────────────────────────────────────────────────
 
 let dirHandle      = null;
 let batchHandle    = null;
-let screenshots    = [];     // { name: string, blob: Blob }
+let screenshots    = [];
 let shotCounter    = 0;
 let batchCounter   = 1;
 let captureStream  = null;
@@ -400,7 +421,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('chk-compress').checked = compressImages;
   renderGrid();
 
-  // Try to restore folder handle from IndexedDB
+  // Update key status from localStorage
+  if (apiKey) setKeyStatus('✓ Key saved', 'var(--green)');
+
+  // PWA: auto-position as a bar when running as installed standalone app
+  if (window.matchMedia('(display-mode: standalone)').matches) {
+    const barH = 135;
+    window.moveTo(screen.availLeft || 0, screen.availTop || 0);
+    window.resizeTo(screen.availWidth, barH + 30); // +30 for OS title bar
+  }
+
+  // PWA: show install button when Chrome offers install prompt
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    const btn = document.getElementById('btn-install');
+    btn.style.display = 'inline-block';
+    btn.addEventListener('click', () => { e.prompt(); btn.style.display = 'none'; });
+  });
+
+  // Try to restore folder from IndexedDB
   const stored = await idbGet('projectFolder');
   if (stored) {
     try {
@@ -414,22 +453,35 @@ document.addEventListener('DOMContentLoaded', async () => {
           try {
             await stored.requestPermission({ mode: 'readwrite' });
             await activateFolder(stored);
-          } catch {
-            resetFolderBtn();
-          }
+          } catch { resetFolderBtn(); }
         };
       }
-    } catch { /* stale handle, ignore */ }
+    } catch { /* stale handle */ }
   }
 
   if (!apiKey) toggleApiPanel();
+
+  // Wire up all buttons
+  document.getElementById('btn-folder').addEventListener('click', selectFolder);
+  document.getElementById('btn-shot').addEventListener('click', takeScreenshot);
+  document.getElementById('btn-send').addEventListener('click', sendToAI);
+  document.getElementById('btn-delete').addEventListener('click', deleteLastScreenshot);
+  document.getElementById('btn-final').addEventListener('click', generateFinalReport);
+  document.getElementById('btn-api-key').addEventListener('click', toggleApiPanel);
+  document.getElementById('btn-save-key').addEventListener('click', saveApiKey);
+  document.getElementById('btn-cancel-key').addEventListener('click', toggleApiPanel);
+  document.getElementById('chk-compress').addEventListener('change', savePrefs);
+  document.getElementById('api-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveApiKey();
+  });
 });
 
 // ── FOLDER ───────────────────────────────────────────────────────────────────
 
 function resetFolderBtn() {
-  document.getElementById('btn-folder').textContent = 'Select Folder';
-  document.getElementById('btn-folder').onclick = selectFolder;
+  const btn = document.getElementById('btn-folder');
+  btn.textContent = 'Select Folder';
+  btn.onclick = selectFolder;
 }
 
 async function selectFolder() {
@@ -445,10 +497,16 @@ async function selectFolder() {
 async function activateFolder(handle) {
   dirHandle = handle;
   setFolderLabel('.../' + handle.name, true);
-  document.getElementById('btn-folder').textContent = '✓ Change';
-  document.getElementById('btn-folder').onclick = selectFolder;
+  const btn = document.getElementById('btn-folder');
+  btn.textContent = '✓ Change';
+  btn.onclick = selectFolder;
 
+  // Load prompts and .env key from the folder
   await loadPrompts(handle);
+  const keyFromEnv = await loadEnv(handle);
+  if (!keyFromEnv && apiKey) setKeyStatus('✓ Key (saved)', 'var(--green)');
+  if (!keyFromEnv && !apiKey) setKeyStatus('⚠ Key not set', 'var(--orange)');
+
   await calcBatchCounter();
   await createBatchFolder();
 
@@ -516,19 +574,17 @@ async function takeScreenshot() {
   try {
     const raw = await grabFrame(captureStream);
 
-    // Calculate how many pixels to crop from the top
-    // (removes our bar + browser chrome from the captured image)
+    // Crop the bar out of the top of the captured image
     const bar     = document.getElementById('bar');
-    const barBot  = bar.getBoundingClientRect().bottom; // CSS px
-    const chromeH = window.outerHeight - window.innerHeight; // CSS px
-    const topCSS  = window.screenY + chromeH + barBot + 8;  // +8 buffer
+    const barBot  = bar.getBoundingClientRect().bottom;
+    const chromeH = window.outerHeight - window.innerHeight;
+    const topCSS  = window.screenY + chromeH + barBot + 8;
 
-    // Scale from CSS px to video frame px
     const settings = captureStream.getVideoTracks()[0].getSettings();
     const scaleY   = settings.height / screen.height;
     const scaleX   = settings.width  / screen.width;
     const topPx    = Math.max(0, Math.round(topCSS * scaleY));
-    const sidePx   = Math.round(5 * 3.78 * scaleX); // ~5 mm
+    const sidePx   = Math.round(5 * 3.78 * scaleX);
 
     const cropped = document.createElement('canvas');
     cropped.width  = raw.width  - 2 * sidePx;
@@ -550,7 +606,7 @@ async function takeScreenshot() {
 
     screenshots.push({ name: fname, blob });
     renderGrid();
-    setStatus(`✓ ${screenshots.length} screenshot${screenshots.length !== 1 ? 's' : ''}`, 'var(--green)');
+    setStatus(`✓ ${screenshots.length} shot${screenshots.length !== 1 ? 's' : ''}`, 'var(--green)');
     document.getElementById('btn-send').disabled   = false;
     document.getElementById('btn-delete').disabled = false;
 
@@ -561,20 +617,16 @@ async function takeScreenshot() {
   document.getElementById('btn-shot').disabled = false;
 }
 
-// Grab a single frame from the live stream via a hidden video element
 function grabFrame(stream) {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
-    video.muted       = true;
-    video.playsInline = true;
-    video.srcObject   = stream;
+    video.muted = true; video.playsInline = true;
+    video.srcObject = stream;
     video.onloadedmetadata = () => {
       video.play().then(() => {
-        // Wait 2 animation frames for a stable image
         requestAnimationFrame(() => requestAnimationFrame(() => {
           const c = document.createElement('canvas');
-          c.width  = video.videoWidth;
-          c.height = video.videoHeight;
+          c.width = video.videoWidth; c.height = video.videoHeight;
           c.getContext('2d').drawImage(video, 0, 0);
           video.srcObject = null;
           resolve(c);
@@ -604,17 +656,12 @@ function renderGrid() {
   grid.innerHTML = '';
   const COLS = 5, ROWS = 2;
   const cells = Array(COLS * ROWS).fill('');
-
-  // Newest first, filling column-by-column top-to-bottom
   [...screenshots].reverse().slice(0, COLS * ROWS).forEach((s, i) => {
-    const col = Math.floor(i / ROWS);
-    const row = i % ROWS;
-    cells[row * COLS + col] = s.name;
+    cells[(i % ROWS) * COLS + Math.floor(i / ROWS)] = s.name;
   });
-
   cells.forEach(name => {
     const d = document.createElement('div');
-    d.className   = 'q-cell' + (name ? ' filled' : '');
+    d.className = 'q-cell' + (name ? ' filled' : '');
     d.textContent = name;
     grid.appendChild(d);
   });
@@ -626,7 +673,7 @@ async function sendToAI() {
   if (!screenshots.length) return;
   if (!checkApiKey()) return;
   if (!SYSTEM_PROMPT || !BATCH_PROMPT) {
-    alert('Prompts not loaded. Make sure prompt_system.txt and prompt_batch.txt are in your project folder.');
+    alert('Prompts not loaded. Ensure prompt_system.txt and prompt_batch.txt are in your project folder.');
     return;
   }
 
@@ -648,8 +695,7 @@ async function sendToAI() {
     });
     await saveFile(batchHandle, 'ai_analysis.docx', docBlob);
 
-    screenshots = [];
-    shotCounter = 0;
+    screenshots = []; shotCounter = 0;
     renderGrid();
     await createBatchFolder();
     setStatus('✓ Saved!', 'var(--green)');
@@ -670,18 +716,17 @@ async function generateFinalReport() {
   if (!dirHandle) return;
   if (!checkApiKey()) return;
   if (!SYSTEM_PROMPT || !FINAL_REPORT_PROMPT) {
-    alert('Prompts not loaded. Make sure prompt_system.txt and prompt_final_report.txt are in your project folder.');
+    alert('Prompts not loaded. Ensure prompt_system.txt and prompt_final_report.txt are in your project folder.');
     return;
   }
 
-  // Collect all batch DOCX files
   const batches = [];
   for await (const entry of dirHandle.values()) {
     if (entry.kind === 'directory' && entry.name.startsWith('batch_')) {
       try {
         const dh = await entry.getFileHandle('ai_analysis.docx');
         batches.push({ name: entry.name, handle: dh });
-      } catch { /* no docx in this batch yet */ }
+      } catch { /* no docx yet */ }
     }
   }
   batches.sort((a, b) => a.name.localeCompare(b.name));
@@ -703,21 +748,18 @@ async function generateFinalReport() {
       const result = await mammoth.extractRawValue({ arrayBuffer: buf });
       const lines  = result.value.split('\n');
       const start  = lines.findIndex(l => l.includes('Response:'));
-      const body   = (start >= 0 ? lines.slice(start + 1) : lines)
-                       .filter(l => l.trim()).join('\n');
+      const body   = (start >= 0 ? lines.slice(start + 1) : lines).filter(l => l.trim()).join('\n');
       if (body) sections.push(`=== ${name} ===\n${body}`);
     }
 
-    const prompt = `${FINAL_REPORT_PROMPT}\n\n=== PREVIOUS ANALYSES ===\n\n${sections.join('\n\n')}`;
-    const text   = await callClaude([{ type: 'text', text: prompt }]);
-
+    const prompt  = `${FINAL_REPORT_PROMPT}\n\n=== PREVIOUS ANALYSES ===\n\n${sections.join('\n\n')}`;
+    const text    = await callClaude([{ type: 'text', text: prompt }]);
     const ts      = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
     const docBlob = await buildDocx('Final Consolidated Report', text, {
       'Generated': new Date().toLocaleString(),
       'Based on':  `${batches.length} batch analyses`,
     });
     await saveFile(dirHandle, `FINAL_REPORT_${ts}.docx`, docBlob);
-
     setStatus('✓ Report saved!', 'var(--green)');
     alert('Final report saved to your project folder.');
 
@@ -729,97 +771,73 @@ async function generateFinalReport() {
   document.getElementById('btn-final').disabled = false;
 }
 
-// ── CLAUDE API ───────────────────────────────────────────────────────────────
+// ── CLAUDE API (via official SDK — handles CORS correctly) ───────────────────
 
 async function callClaude(content) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key':                                    apiKey,
-      'anthropic-version':                            '2023-06-01',
-      'anthropic-dangerous-client-side-allow-origin': '*',
-      'content-type':                                 'application/json',
-    },
-    body: JSON.stringify({
-      model:      'claude-sonnet-4-20250514',
-      max_tokens: 16000,
-      system:     [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-      messages:   [{ role: 'user', content }],
-    }),
+  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const msg = await client.messages.create({
+    model:      'claude-sonnet-4-6',
+    max_tokens: 16000,
+    system:     [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+    messages:   [{ role: 'user', content }],
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  return data.content[0].text;
+  return msg.content[0].text;
 }
 
 // ── DOCX BUILDER ─────────────────────────────────────────────────────────────
 
 async function buildDocx(title, responseText, metadata = {}) {
   const { Document, Paragraph, TextRun, HeadingLevel, Packer } = window.docx;
-
-  const children = [
-    new Paragraph({ text: title, heading: HeadingLevel.TITLE }),
-  ];
+  const children = [new Paragraph({ text: title, heading: HeadingLevel.TITLE })];
 
   for (const [k, v] of Object.entries(metadata)) {
     children.push(new Paragraph({ children: [new TextRun(`${k}: ${v}`)] }));
   }
-
   children.push(new Paragraph({ text: 'Response:', heading: HeadingLevel.HEADING_1 }));
 
   for (const line of responseText.split('\n')) {
     const l = line.trim();
     if (!l) continue;
-
-    if (l.startsWith('### ')) {
-      children.push(new Paragraph({ text: l.slice(4), heading: HeadingLevel.HEADING_3 }));
-    } else if (l.startsWith('## ')) {
-      children.push(new Paragraph({ text: l.slice(3), heading: HeadingLevel.HEADING_2 }));
-    } else if (l.startsWith('# ')) {
-      children.push(new Paragraph({ text: l.slice(2), heading: HeadingLevel.HEADING_1 }));
-    } else {
+    if      (l.startsWith('### ')) children.push(new Paragraph({ text: l.slice(4), heading: HeadingLevel.HEADING_3 }));
+    else if (l.startsWith('## '))  children.push(new Paragraph({ text: l.slice(3), heading: HeadingLevel.HEADING_2 }));
+    else if (l.startsWith('# '))   children.push(new Paragraph({ text: l.slice(2), heading: HeadingLevel.HEADING_1 }));
+    else {
       const parts = l.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
-      const runs  = parts.map(p =>
-        p.startsWith('**') && p.endsWith('**')
-          ? new TextRun({ text: p.slice(2, -2), bold: true })
-          : new TextRun({ text: p })
-      );
-      children.push(new Paragraph({ children: runs }));
+      children.push(new Paragraph({
+        children: parts.map(p =>
+          p.startsWith('**') && p.endsWith('**')
+            ? new TextRun({ text: p.slice(2, -2), bold: true })
+            : new TextRun({ text: p })
+        ),
+      }));
     }
   }
 
-  const doc = new Document({ sections: [{ properties: {}, children }] });
-  return Packer.toBlob(doc);
+  return Packer.toBlob(new Document({ sections: [{ properties: {}, children }] }));
 }
 
 // ── FILE HELPERS ─────────────────────────────────────────────────────────────
 
-async function saveFile(dirOrBatchHandle, filename, blob) {
-  const fh = await dirOrBatchHandle.getFileHandle(filename, { create: true });
+async function saveFile(handle, filename, blob) {
+  const fh = await handle.getFileHandle(filename, { create: true });
   const w  = await fh.createWritable();
-  await w.write(blob);
-  await w.close();
+  await w.write(blob); await w.close();
 }
 
-function canvasToBlob(canvas, type = 'image/png') {
-  return new Promise(r => canvas.toBlob(r, type));
+function canvasToBlob(canvas) {
+  return new Promise(r => canvas.toBlob(r, 'image/png'));
 }
 
 function blobToB64(blob) {
   return new Promise((res, rej) => {
-    const reader  = new FileReader();
-    reader.onload = () => res(reader.result.split(',')[1]);
-    reader.onerror = rej;
-    reader.readAsDataURL(blob);
+    const r = new FileReader();
+    r.onload  = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(blob);
   });
 }
 
-// ── INDEXEDDB (folder handle persistence across sessions) ────────────────────
+// ── INDEXEDDB ────────────────────────────────────────────────────────────────
 
 function openIDB() {
   return new Promise((res, rej) => {
@@ -829,22 +847,19 @@ function openIDB() {
     req.onerror   = e => rej(e.target.error);
   });
 }
-
-async function idbSet(key, value) {
+async function idbSet(key, val) {
   const db = await openIDB();
   return new Promise((res, rej) => {
     const tx = db.transaction('kv', 'readwrite');
-    tx.objectStore('kv').put(value, key);
-    tx.oncomplete = res;
-    tx.onerror    = e => rej(e.target.error);
+    tx.objectStore('kv').put(val, key);
+    tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
   });
 }
-
 async function idbGet(key) {
   try {
     const db = await openIDB();
     return new Promise(res => {
-      const req  = db.transaction('kv', 'readonly').objectStore('kv').get(key);
+      const req = db.transaction('kv', 'readonly').objectStore('kv').get(key);
       req.onsuccess = e => res(e.target.result ?? null);
       req.onerror   = () => res(null);
     });
@@ -855,14 +870,13 @@ async function idbGet(key) {
 
 function setStatus(text, color) {
   const el = document.getElementById('status');
-  el.textContent = text;
-  el.style.color = color;
+  el.textContent = text; el.style.color = color;
 }
 
 function lockUI(busy) {
-  ['btn-send', 'btn-shot', 'btn-delete', 'btn-final'].forEach(id => {
-    document.getElementById(id).disabled = busy;
-  });
+  ['btn-send', 'btn-shot', 'btn-delete', 'btn-final'].forEach(id =>
+    document.getElementById(id).disabled = busy
+  );
   if (!busy) {
     document.getElementById('btn-shot').disabled   = !dirHandle;
     document.getElementById('btn-final').disabled  = !dirHandle;
@@ -884,6 +898,7 @@ function saveApiKey() {
   if (val) {
     apiKey = val;
     localStorage.setItem('ew-api-key', val);
+    setKeyStatus('✓ Key saved', 'var(--green)');
     document.getElementById('api-panel').classList.remove('open');
   }
 }
