@@ -24,7 +24,7 @@
       --blue:    #2196F3;
       --orange:  #FFA726;
       --sep:     #3a3a3a;
-      --bar-h:   135px;
+      --bar-h:   70px;
     }
 
     body {
@@ -52,16 +52,8 @@
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      padding: 0 14px;
-      gap: 4px;
-    }
-
-    .sec-label {
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 0.8px;
-      color: var(--fg2);
-      text-transform: uppercase;
+      padding: 0 10px;
+      gap: 3px;
     }
 
     .vsep {
@@ -88,20 +80,20 @@
 
     .btn-big {
       background: var(--green);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
-      padding: 0 18px;
-      min-width: 110px;
-      height: 68px;
+      padding: 0 14px;
+      min-width: 100px;
+      height: 44px;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      gap: 6px;
       border-radius: 5px;
     }
     .btn-big:hover:not(:disabled) { background: var(--green-h); }
-    .btn-big span { font-size: 18px; }
+    .btn-big span { font-size: 15px; }
 
     /* ── FOLDER SECTION ─────────────────────────────────────── */
     #folder-name {
@@ -124,6 +116,8 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    #key-status { cursor: pointer; }
+    #key-status:hover { opacity: 0.75; }
 
     .row { display: flex; align-items: center; gap: 6px; }
 
@@ -152,14 +146,14 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 7px;
+      margin-bottom: 4px;
     }
 
     #queue-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
       gap: 3px;
-      height: 54px;
+      height: 24px;
     }
 
     .q-cell {
@@ -247,19 +241,15 @@
 
   <!-- 1. PROJECT FOLDER -->
   <div class="section" style="min-width:165px;">
-    <span class="sec-label">📁 Project Folder</span>
     <button id="btn-folder" style="width:145px;">Select Folder</button>
     <div id="folder-name">Not selected</div>
-    <div id="prompt-status" class="mini-status">Prompts: select folder</div>
-    <div id="key-status"    class="mini-status">Key: not set</div>
-    <div class="row" style="margin-top:1px;">
-      <label class="row" style="font-size:10px; color:var(--fg2); cursor:pointer; gap:4px;">
+    <div class="row" style="gap:8px;">
+      <div id="prompt-status" class="mini-status">✗ Prompts</div>
+      <div id="key-status"    class="mini-status" title="Click to set API key">✗ Key</div>
+      <label class="row" style="font-size:9px; color:var(--fg2); cursor:pointer; gap:3px;">
         <input type="checkbox" id="chk-compress"> Compress
       </label>
-      <button id="btn-api-key" style="font-size:9px; padding:3px 8px; background:#26263a; color:#90CAF9;">
-        🔑 API Key
-      </button>
-      <button id="btn-install">📌 Install App</button>
+      <button id="btn-install">📌</button>
     </div>
   </div>
 
@@ -267,13 +257,10 @@
 
   <!-- 2. SCREENSHOT -->
   <div class="section">
-    <div class="row" style="margin-bottom:4px;">
-      <div class="dot" id="cap-dot"></div>
-      <span id="cap-label" style="font-size:9px; color:var(--fg2);">No capture</span>
-    </div>
     <button class="btn-big" id="btn-shot" disabled>
-      <span>📷</span>SCREENSHOT
+      <div class="dot" id="cap-dot"></div><span>📷</span>SCREENSHOT
     </button>
+    <span id="cap-label" style="font-size:8px; color:var(--fg2);">No capture</span>
   </div>
 
   <div class="vsep"></div>
@@ -281,7 +268,6 @@
   <!-- 3. QUEUE + CONTROLS -->
   <div id="queue-section">
     <div class="queue-header">
-      <span class="sec-label">📸 Screenshot Queue</span>
       <button id="btn-send"   disabled style="font-size:10px;">📤 Send to AI</button>
       <button id="btn-delete" disabled style="font-size:10px;">🗑 Delete Last</button>
       <span id="status">Ready</span>
@@ -293,7 +279,6 @@
 
   <!-- 4. FINAL REPORT -->
   <div class="section">
-    <span class="sec-label">🎯 Consolidate</span>
     <button class="btn-big" id="btn-final" disabled>
       <span>📊</span>FINAL REPORT
     </button>
@@ -344,18 +329,29 @@ let BATCH_PROMPT        = '';
 let FINAL_REPORT_PROMPT = '';
 
 async function loadPrompts(handle) {
+  // Each prompt is tried as .docx first, then .txt fallback
   const files = {
-    system:      'prompt_system.txt',
-    batch:       'prompt_batch.txt',
-    finalReport: 'prompt_final_report.txt',
+    system:      'prompt_system',
+    batch:       'prompt_batch',
+    finalReport: 'prompt_final_report',
   };
+
   const loaded = {};
-  for (const [key, filename] of Object.entries(files)) {
-    try {
-      const fh   = await handle.getFileHandle(filename);
-      const file = await fh.getFile();
-      loaded[key] = (await file.text()).trim();
-    } catch { /* file not in folder */ }
+  for (const [key, base] of Object.entries(files)) {
+    for (const ext of ['docx', 'txt']) {
+      try {
+        const fh   = await handle.getFileHandle(`${base}.${ext}`);
+        const file = await fh.getFile();
+        if (ext === 'docx') {
+          const buf    = await file.arrayBuffer();
+          const result = await mammoth.extractRawValue({ arrayBuffer: buf });
+          loaded[key]  = result.value.trim();
+        } else {
+          loaded[key] = (await file.text()).trim();
+        }
+        break; // found one — stop trying
+      } catch { /* try next extension */ }
+    }
   }
 
   SYSTEM_PROMPT       = loaded.system      || '';
@@ -365,7 +361,7 @@ async function loadPrompts(handle) {
   const allLoaded = !!(SYSTEM_PROMPT && BATCH_PROMPT && FINAL_REPORT_PROMPT);
   const el = document.getElementById('prompt-status');
   if (allLoaded) {
-    el.textContent = '✓ Prompts loaded';
+    el.textContent = '✓ Prompts';
     el.style.color = 'var(--green)';
   } else {
     const missing = Object.entries(files)
@@ -426,7 +422,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // PWA: auto-position as a bar when running as installed standalone app
   if (window.matchMedia('(display-mode: standalone)').matches) {
-    const barH = 135;
+    const barH = 70;
     window.moveTo(screen.availLeft || 0, screen.availTop || 0);
     window.resizeTo(screen.availWidth, barH + 30); // +30 for OS title bar
   }
@@ -467,7 +463,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-send').addEventListener('click', sendToAI);
   document.getElementById('btn-delete').addEventListener('click', deleteLastScreenshot);
   document.getElementById('btn-final').addEventListener('click', generateFinalReport);
-  document.getElementById('btn-api-key').addEventListener('click', toggleApiPanel);
+  document.getElementById('key-status').addEventListener('click', toggleApiPanel);
   document.getElementById('btn-save-key').addEventListener('click', saveApiKey);
   document.getElementById('btn-cancel-key').addEventListener('click', toggleApiPanel);
   document.getElementById('chk-compress').addEventListener('change', savePrefs);
@@ -654,7 +650,7 @@ function deleteLastScreenshot() {
 function renderGrid() {
   const grid = document.getElementById('queue-grid');
   grid.innerHTML = '';
-  const COLS = 5, ROWS = 2;
+  const COLS = 5, ROWS = 1;
   const cells = Array(COLS * ROWS).fill('');
   [...screenshots].reverse().slice(0, COLS * ROWS).forEach((s, i) => {
     cells[(i % ROWS) * COLS + Math.floor(i / ROWS)] = s.name;
