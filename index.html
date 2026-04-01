@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screenshot AI Report • Claude Sonnet</title>
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+  <script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #1a1a1a;
+      --bg-el:   #252525;
+      --fg:      #ffffff;
+      --fg2:     #b0b0b0;
+      --btn:     #2d2d2d;
+      --btn-h:   #3d3d3d;
+      --green:   #4CAF50;
+      --green-h: #66BB6A;
+      --red:     #f44336;
+      --blue:    #2196F3;
+      --orange:  #FFA726;
+      --sep:     #3a3a3a;
+      --bar-h:   135px;
+    }
+
+    body {
+      background: #0d0d0d;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: var(--fg);
+      overflow: hidden;
+    }
+
+    /* ── TOP BAR ────────────────────────────────────────────── */
+    #bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--bar-h);
+      background: var(--bg);
+      border-bottom: 1px solid var(--sep);
+      display: flex;
+      align-items: stretch;
+      padding: 8px;
+      z-index: 9999;
+    }
+
+    .section {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 0 14px;
+      gap: 5px;
+    }
+
+    .sec-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      color: var(--fg2);
+      text-transform: uppercase;
+    }
+
+    .vsep {
+      width: 1px;
+      background: var(--sep);
+      margin: 4px 6px;
+      align-self: stretch;
+    }
+
+    /* ── BUTTONS ────────────────────────────────────────────── */
+    button {
+      background: var(--btn);
+      color: var(--fg);
+      border: none;
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    button:hover:not(:disabled) { background: var(--btn-h); }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .btn-big {
+      background: var(--green);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 0 18px;
+      min-width: 110px;
+      height: 72px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border-radius: 5px;
+    }
+    .btn-big:hover:not(:disabled) { background: var(--green-h); }
+    .btn-big span { font-size: 20px; }
+
+    /* ── FOLDER SECTION ─────────────────────────────────────── */
+    #folder-name {
+      font-size: 10px;
+      color: var(--red);
+      max-width: 155px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: center;
+    }
+    #folder-name.ok { color: var(--green); }
+
+    #prompt-status {
+      font-size: 9px;
+      color: var(--fg2);
+      text-align: center;
+      max-width: 155px;
+    }
+
+    .row { display: flex; align-items: center; gap: 6px; }
+
+    /* ── CAPTURE INDICATOR ──────────────────────────────────── */
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--btn);
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .dot.live { background: var(--green); animation: pulse 1.5s infinite; }
+    .dot.dead { background: var(--red); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+    /* ── QUEUE SECTION ──────────────────────────────────────── */
+    #queue-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 10px;
+      min-width: 320px;
+    }
+
+    .queue-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+
+    #queue-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 3px;
+      height: 54px;
+    }
+
+    .q-cell {
+      background: var(--bg-el);
+      border-radius: 3px;
+      font-size: 8px;
+      color: var(--fg2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2px 3px;
+      overflow: hidden;
+    }
+    .q-cell.filled {
+      background: #1e3a1e;
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    #status {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--blue);
+      white-space: nowrap;
+    }
+
+    /* ── API KEY PANEL ──────────────────────────────────────── */
+    #api-panel {
+      display: none;
+      position: fixed;
+      top: calc(var(--bar-h) + 8px);
+      left: 8px;
+      background: var(--bg-el);
+      border: 1px solid var(--sep);
+      border-radius: 6px;
+      padding: 14px;
+      z-index: 9998;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 340px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.6);
+    }
+    #api-panel.open { display: flex; }
+
+    #api-panel input {
+      background: var(--bg);
+      color: var(--fg);
+      border: 1px solid var(--sep);
+      border-radius: 4px;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-family: monospace;
+      width: 100%;
+    }
+    #api-panel input:focus { outline: 1px solid var(--blue); }
+
+    .api-note {
+      font-size: 10px;
+      color: var(--fg2);
+      line-height: 1.6;
+    }
+
+    /* ── COMPAT ERROR ───────────────────────────────────────── */
+    #compat-error {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      z-index: 99999;
+      padding: 40px;
+      text-align: center;
+    }
+    #compat-error.show { display: flex; }
+    #compat-error h2 { color: var(--orange); font-size: 20px; }
+    #compat-error p  { color: var(--fg2); max-width: 420px; line-height: 1.6; }
+
+    #spacer { height: var(--bar-h); }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TOP BAR                                                    -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="bar">
+
+  <!-- 1. PROJECT FOLDER -->
+  <div class="section" style="min-width:165px;">
+    <span class="sec-label">📁 Project Folder</span>
+    <button id="btn-folder" onclick="selectFolder()" style="width:145px;">Select Folder</button>
+    <div id="folder-name">Not selected</div>
+    <div id="prompt-status">Prompts: select folder</div>
+    <div class="row" style="margin-top:2px;">
+      <label class="row" style="font-size:10px; color:var(--fg2); cursor:pointer; gap:4px;">
+        <input type="checkbox" id="chk-compress" onchange="savePrefs()"> Compress
+      </label>
+      <button onclick="toggleApiPanel()"
+              style="font-size:9px; padding:3px 8px; background:#26263a; color:#90CAF9;">
+        🔑 API Key
+      </button>
+    </div>
+  </div>
+
+  <div class="vsep"></div>
+
+  <!-- 2. SCREENSHOT -->
+  <div class="section">
+    <div class="row" style="margin-bottom:5px;">
+      <div class="dot" id="cap-dot"></div>
+      <span id="cap-label" style="font-size:9px; color:var(--fg2);">No capture</span>
+    </div>
+    <button class="btn-big" id="btn-shot" onclick="takeScreenshot()" disabled>
+      <span>📷</span>SCREENSHOT
+    </button>
+  </div>
+
+  <div class="vsep"></div>
+
+  <!-- 3. QUEUE + CONTROLS -->
+  <div id="queue-section">
+    <div class="queue-header">
+      <span class="sec-label">📸 Screenshot Queue</span>
+      <button id="btn-send"   onclick="sendToAI()"             disabled style="font-size:10px;">📤 Send to AI</button>
+      <button id="btn-delete" onclick="deleteLastScreenshot()" disabled style="font-size:10px;">🗑 Delete Last</button>
+      <span id="status">Ready</span>
+    </div>
+    <div id="queue-grid"></div>
+  </div>
+
+  <div class="vsep"></div>
+
+  <!-- 4. FINAL REPORT -->
+  <div class="section">
+    <span class="sec-label">🎯 Consolidate</span>
+    <button class="btn-big" id="btn-final" onclick="generateFinalReport()" disabled>
+      <span>📊</span>FINAL REPORT
+    </button>
+  </div>
+
+</div><!-- /bar -->
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- API KEY PANEL                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="api-panel">
+  <span class="sec-label">Anthropic API Key</span>
+  <input type="password" id="api-input" placeholder="sk-ant-api03-..."
+         autocomplete="off" onkeydown="if(event.key==='Enter') saveApiKey()">
+  <div class="row">
+    <button onclick="saveApiKey()" style="flex:1; background:#1e3a1e; color:var(--green);">Save</button>
+    <button onclick="toggleApiPanel()" style="flex:1;">Cancel</button>
+  </div>
+  <p class="api-note">
+    Stored in your browser's localStorage only.<br>
+    Sent exclusively to <code>api.anthropic.com</code> — never to any server.
+  </p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- BROWSER COMPAT ERROR                                      -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="compat-error">
+  <h2>⚠️ Browser Not Supported</h2>
+  <p>This app requires <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> (version 86+).<br>
+     Please reopen this page in Chrome or Edge.</p>
+</div>
+
+<div id="spacer"></div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SCRIPT                                                    -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ── PROMPTS (loaded from project folder at runtime) ──────────────────────────
+// The app reads prompt_system.txt, prompt_batch.txt, prompt_final_report.txt
+// from the selected project folder. Nothing sensitive is hardcoded here.
+
+let SYSTEM_PROMPT       = '';
+let BATCH_PROMPT        = '';
+let FINAL_REPORT_PROMPT = '';
+
+async function loadPrompts(handle) {
+  const files = {
+    system:      'prompt_system.txt',
+    batch:       'prompt_batch.txt',
+    finalReport: 'prompt_final_report.txt',
+  };
+  const loaded = {};
+  for (const [key, filename] of Object.entries(files)) {
+    try {
+      const fh   = await handle.getFileHandle(filename);
+      const file = await fh.getFile();
+      loaded[key] = (await file.text()).trim();
+    } catch { /* file not present */ }
+  }
+
+  SYSTEM_PROMPT       = loaded.system      || '';
+  BATCH_PROMPT        = loaded.batch       || '';
+  FINAL_REPORT_PROMPT = loaded.finalReport || '';
+
+  const allLoaded = !!(SYSTEM_PROMPT && BATCH_PROMPT && FINAL_REPORT_PROMPT);
+  const el = document.getElementById('prompt-status');
+  if (allLoaded) {
+    el.textContent = '✓ Prompts loaded';
+    el.style.color = 'var(--green)';
+  } else {
+    const missing = Object.entries(files)
+      .filter(([k]) => !loaded[k])
+      .map(([, v]) => v)
+      .join(', ');
+    el.textContent = `⚠ Missing: ${missing}`;
+    el.style.color = 'var(--orange)';
+  }
+}
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+
+let dirHandle      = null;
+let batchHandle    = null;
+let screenshots    = [];     // { name: string, blob: Blob }
+let shotCounter    = 0;
+let batchCounter   = 1;
+let captureStream  = null;
+let apiKey         = localStorage.getItem('ew-api-key') || '';
+let compressImages = localStorage.getItem('ew-compress') === 'true';
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!('showDirectoryPicker' in window) || !navigator.mediaDevices?.getDisplayMedia) {
+    document.getElementById('compat-error').classList.add('show');
+    return;
+  }
+
+  document.getElementById('chk-compress').checked = compressImages;
+  renderGrid();
+
+  // Try to restore folder handle from IndexedDB
+  const stored = await idbGet('projectFolder');
+  if (stored) {
+    try {
+      const perm = await stored.queryPermission({ mode: 'readwrite' });
+      if (perm === 'granted') {
+        await activateFolder(stored);
+      } else {
+        setFolderLabel('↻ ' + stored.name, false);
+        document.getElementById('btn-folder').textContent = 'Reconnect';
+        document.getElementById('btn-folder').onclick = async () => {
+          try {
+            await stored.requestPermission({ mode: 'readwrite' });
+            await activateFolder(stored);
+          } catch {
+            resetFolderBtn();
+          }
+        };
+      }
+    } catch { /* stale handle, ignore */ }
+  }
+
+  if (!apiKey) toggleApiPanel();
+});
+
+// ── FOLDER ───────────────────────────────────────────────────────────────────
+
+function resetFolderBtn() {
+  document.getElementById('btn-folder').textContent = 'Select Folder';
+  document.getElementById('btn-folder').onclick = selectFolder;
+}
+
+async function selectFolder() {
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    await idbSet('projectFolder', handle);
+    await activateFolder(handle);
+  } catch (e) {
+    if (e.name !== 'AbortError') alert('Could not open folder: ' + e.message);
+  }
+}
+
+async function activateFolder(handle) {
+  dirHandle = handle;
+  setFolderLabel('.../' + handle.name, true);
+  document.getElementById('btn-folder').textContent = '✓ Change';
+  document.getElementById('btn-folder').onclick = selectFolder;
+
+  await loadPrompts(handle);
+  await calcBatchCounter();
+  await createBatchFolder();
+
+  document.getElementById('btn-shot').disabled  = false;
+  document.getElementById('btn-final').disabled = false;
+}
+
+function setFolderLabel(text, ok) {
+  const el = document.getElementById('folder-name');
+  el.textContent = text;
+  el.className = ok ? 'ok' : '';
+}
+
+async function calcBatchCounter() {
+  let max = 0;
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'directory' && entry.name.startsWith('batch_')) {
+      const n = parseInt(entry.name.split('_')[1], 10);
+      if (!isNaN(n)) max = Math.max(max, n);
+    }
+  }
+  batchCounter = max + 1;
+}
+
+async function createBatchFolder() {
+  const ts   = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  const name = `batch_${batchCounter}_${ts}`;
+  batchHandle = await dirHandle.getDirectoryHandle(name, { create: true });
+  batchCounter++;
+}
+
+// ── SCREEN CAPTURE ───────────────────────────────────────────────────────────
+
+async function ensureStream() {
+  if (captureStream?.active && captureStream.getVideoTracks()[0]?.readyState === 'live') {
+    return true;
+  }
+  try {
+    captureStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: 'monitor', frameRate: 5 },
+      audio: false,
+    });
+    captureStream.getVideoTracks()[0].addEventListener('ended', () => {
+      captureStream = null;
+      document.getElementById('cap-dot').className    = 'dot dead';
+      document.getElementById('cap-label').textContent = 'Stopped';
+    });
+    document.getElementById('cap-dot').className    = 'dot live';
+    document.getElementById('cap-label').textContent = 'Live';
+    return true;
+  } catch (e) {
+    if (e.name !== 'AbortError') alert('Screen capture failed: ' + e.message);
+    return false;
+  }
+}
+
+async function takeScreenshot() {
+  if (!dirHandle || !batchHandle) { alert('Select a project folder first.'); return; }
+
+  const ok = await ensureStream();
+  if (!ok) return;
+
+  document.getElementById('btn-shot').disabled = true;
+
+  try {
+    const raw = await grabFrame(captureStream);
+
+    // Calculate how many pixels to crop from the top
+    // (removes our bar + browser chrome from the captured image)
+    const bar     = document.getElementById('bar');
+    const barBot  = bar.getBoundingClientRect().bottom; // CSS px
+    const chromeH = window.outerHeight - window.innerHeight; // CSS px
+    const topCSS  = window.screenY + chromeH + barBot + 8;  // +8 buffer
+
+    // Scale from CSS px to video frame px
+    const settings = captureStream.getVideoTracks()[0].getSettings();
+    const scaleY   = settings.height / screen.height;
+    const scaleX   = settings.width  / screen.width;
+    const topPx    = Math.max(0, Math.round(topCSS * scaleY));
+    const sidePx   = Math.round(5 * 3.78 * scaleX); // ~5 mm
+
+    const cropped = document.createElement('canvas');
+    cropped.width  = raw.width  - 2 * sidePx;
+    cropped.height = raw.height - topPx;
+    cropped.getContext('2d').drawImage(raw, -sidePx, -topPx);
+
+    let final = cropped;
+    if (compressImages) {
+      final = document.createElement('canvas');
+      final.width  = Math.round(cropped.width  * 0.7);
+      final.height = Math.round(cropped.height * 0.7);
+      final.getContext('2d').drawImage(cropped, 0, 0, final.width, final.height);
+    }
+
+    const blob  = await canvasToBlob(final);
+    shotCounter++;
+    const fname = `screenshot_${String(shotCounter).padStart(3, '0')}.png`;
+    await saveFile(batchHandle, fname, blob);
+
+    screenshots.push({ name: fname, blob });
+    renderGrid();
+    setStatus(`✓ ${screenshots.length} screenshot${screenshots.length !== 1 ? 's' : ''}`, 'var(--green)');
+    document.getElementById('btn-send').disabled   = false;
+    document.getElementById('btn-delete').disabled = false;
+
+  } catch (e) {
+    alert('Screenshot error: ' + e.message);
+  }
+
+  document.getElementById('btn-shot').disabled = false;
+}
+
+// Grab a single frame from the live stream via a hidden video element
+function grabFrame(stream) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.muted       = true;
+    video.playsInline = true;
+    video.srcObject   = stream;
+    video.onloadedmetadata = () => {
+      video.play().then(() => {
+        // Wait 2 animation frames for a stable image
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const c = document.createElement('canvas');
+          c.width  = video.videoWidth;
+          c.height = video.videoHeight;
+          c.getContext('2d').drawImage(video, 0, 0);
+          video.srcObject = null;
+          resolve(c);
+        }));
+      }).catch(reject);
+    };
+    video.onerror = () => reject(new Error('Video element error'));
+  });
+}
+
+function deleteLastScreenshot() {
+  if (!screenshots.length) return;
+  screenshots.pop();
+  shotCounter = Math.max(0, shotCounter - 1);
+  renderGrid();
+  if (!screenshots.length) {
+    document.getElementById('btn-send').disabled   = true;
+    document.getElementById('btn-delete').disabled = true;
+    setStatus('Ready', 'var(--blue)');
+  }
+}
+
+// ── QUEUE GRID ───────────────────────────────────────────────────────────────
+
+function renderGrid() {
+  const grid = document.getElementById('queue-grid');
+  grid.innerHTML = '';
+  const COLS = 5, ROWS = 2;
+  const cells = Array(COLS * ROWS).fill('');
+
+  // Newest first, filling column-by-column top-to-bottom
+  [...screenshots].reverse().slice(0, COLS * ROWS).forEach((s, i) => {
+    const col = Math.floor(i / ROWS);
+    const row = i % ROWS;
+    cells[row * COLS + col] = s.name;
+  });
+
+  cells.forEach(name => {
+    const d = document.createElement('div');
+    d.className   = 'q-cell' + (name ? ' filled' : '');
+    d.textContent = name;
+    grid.appendChild(d);
+  });
+}
+
+// ── SEND TO AI (batch) ───────────────────────────────────────────────────────
+
+async function sendToAI() {
+  if (!screenshots.length) return;
+  if (!checkApiKey()) return;
+  if (!SYSTEM_PROMPT || !BATCH_PROMPT) {
+    alert('Prompts not loaded. Make sure prompt_system.txt and prompt_batch.txt are in your project folder.');
+    return;
+  }
+
+  lockUI(true);
+  setStatus('⏳ Sending...', 'var(--orange)');
+
+  try {
+    const imageBlocks = await Promise.all(screenshots.map(async ({ blob }) => ({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/png', data: await blobToB64(blob) },
+    })));
+
+    const content = [...imageBlocks, { type: 'text', text: BATCH_PROMPT }];
+    const text    = await callClaude(content);
+
+    const docBlob = await buildDocx('AI Analysis', text, {
+      'Date':                 new Date().toLocaleString(),
+      'Screenshots analyzed': String(screenshots.length),
+    });
+    await saveFile(batchHandle, 'ai_analysis.docx', docBlob);
+
+    screenshots = [];
+    shotCounter = 0;
+    renderGrid();
+    await createBatchFolder();
+    setStatus('✓ Saved!', 'var(--green)');
+    document.getElementById('btn-send').disabled   = true;
+    document.getElementById('btn-delete').disabled = true;
+
+  } catch (e) {
+    alert('API Error: ' + e.message);
+    setStatus('❌ Error', 'var(--red)');
+  }
+
+  lockUI(false);
+}
+
+// ── FINAL REPORT ─────────────────────────────────────────────────────────────
+
+async function generateFinalReport() {
+  if (!dirHandle) return;
+  if (!checkApiKey()) return;
+  if (!SYSTEM_PROMPT || !FINAL_REPORT_PROMPT) {
+    alert('Prompts not loaded. Make sure prompt_system.txt and prompt_final_report.txt are in your project folder.');
+    return;
+  }
+
+  // Collect all batch DOCX files
+  const batches = [];
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'directory' && entry.name.startsWith('batch_')) {
+      try {
+        const dh = await entry.getFileHandle('ai_analysis.docx');
+        batches.push({ name: entry.name, handle: dh });
+      } catch { /* no docx in this batch yet */ }
+    }
+  }
+  batches.sort((a, b) => a.name.localeCompare(b.name));
+
+  if (!batches.length) {
+    alert('No batch analyses found. Send at least one batch to AI first.');
+    return;
+  }
+  if (!confirm(`Generate final report from ${batches.length} batch analysis${batches.length !== 1 ? 'es' : ''}?`)) return;
+
+  document.getElementById('btn-final').disabled = true;
+  setStatus('⏳ Consolidating...', 'var(--orange)');
+
+  try {
+    const sections = [];
+    for (const { name, handle } of batches) {
+      const file   = await handle.getFile();
+      const buf    = await file.arrayBuffer();
+      const result = await mammoth.extractRawValue({ arrayBuffer: buf });
+      const lines  = result.value.split('\n');
+      const start  = lines.findIndex(l => l.includes('Response:'));
+      const body   = (start >= 0 ? lines.slice(start + 1) : lines)
+                       .filter(l => l.trim()).join('\n');
+      if (body) sections.push(`=== ${name} ===\n${body}`);
+    }
+
+    const prompt = `${FINAL_REPORT_PROMPT}\n\n=== PREVIOUS ANALYSES ===\n\n${sections.join('\n\n')}`;
+    const text   = await callClaude([{ type: 'text', text: prompt }]);
+
+    const ts      = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+    const docBlob = await buildDocx('Final Consolidated Report', text, {
+      'Generated': new Date().toLocaleString(),
+      'Based on':  `${batches.length} batch analyses`,
+    });
+    await saveFile(dirHandle, `FINAL_REPORT_${ts}.docx`, docBlob);
+
+    setStatus('✓ Report saved!', 'var(--green)');
+    alert('Final report saved to your project folder.');
+
+  } catch (e) {
+    alert('Final report error: ' + e.message);
+    setStatus('❌ Failed', 'var(--red)');
+  }
+
+  document.getElementById('btn-final').disabled = false;
+}
+
+// ── CLAUDE API ───────────────────────────────────────────────────────────────
+
+async function callClaude(content) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key':                                    apiKey,
+      'anthropic-version':                            '2023-06-01',
+      'anthropic-dangerous-client-side-allow-origin': '*',
+      'content-type':                                 'application/json',
+    },
+    body: JSON.stringify({
+      model:      'claude-sonnet-4-20250514',
+      max_tokens: 16000,
+      system:     [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      messages:   [{ role: 'user', content }],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.content[0].text;
+}
+
+// ── DOCX BUILDER ─────────────────────────────────────────────────────────────
+
+async function buildDocx(title, responseText, metadata = {}) {
+  const { Document, Paragraph, TextRun, HeadingLevel, Packer } = window.docx;
+
+  const children = [
+    new Paragraph({ text: title, heading: HeadingLevel.TITLE }),
+  ];
+
+  for (const [k, v] of Object.entries(metadata)) {
+    children.push(new Paragraph({ children: [new TextRun(`${k}: ${v}`)] }));
+  }
+
+  children.push(new Paragraph({ text: 'Response:', heading: HeadingLevel.HEADING_1 }));
+
+  for (const line of responseText.split('\n')) {
+    const l = line.trim();
+    if (!l) continue;
+
+    if (l.startsWith('### ')) {
+      children.push(new Paragraph({ text: l.slice(4), heading: HeadingLevel.HEADING_3 }));
+    } else if (l.startsWith('## ')) {
+      children.push(new Paragraph({ text: l.slice(3), heading: HeadingLevel.HEADING_2 }));
+    } else if (l.startsWith('# ')) {
+      children.push(new Paragraph({ text: l.slice(2), heading: HeadingLevel.HEADING_1 }));
+    } else {
+      const parts = l.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
+      const runs  = parts.map(p =>
+        p.startsWith('**') && p.endsWith('**')
+          ? new TextRun({ text: p.slice(2, -2), bold: true })
+          : new TextRun({ text: p })
+      );
+      children.push(new Paragraph({ children: runs }));
+    }
+  }
+
+  const doc = new Document({ sections: [{ properties: {}, children }] });
+  return Packer.toBlob(doc);
+}
+
+// ── FILE HELPERS ─────────────────────────────────────────────────────────────
+
+async function saveFile(dirOrBatchHandle, filename, blob) {
+  const fh = await dirOrBatchHandle.getFileHandle(filename, { create: true });
+  const w  = await fh.createWritable();
+  await w.write(blob);
+  await w.close();
+}
+
+function canvasToBlob(canvas, type = 'image/png') {
+  return new Promise(r => canvas.toBlob(r, type));
+}
+
+function blobToB64(blob) {
+  return new Promise((res, rej) => {
+    const reader  = new FileReader();
+    reader.onload = () => res(reader.result.split(',')[1]);
+    reader.onerror = rej;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// ── INDEXEDDB (folder handle persistence across sessions) ────────────────────
+
+function openIDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('ew-screenshot-ai', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('kv');
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+
+async function idbSet(key, value) {
+  const db = await openIDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(value, key);
+    tx.oncomplete = res;
+    tx.onerror    = e => rej(e.target.error);
+  });
+}
+
+async function idbGet(key) {
+  try {
+    const db = await openIDB();
+    return new Promise(res => {
+      const req  = db.transaction('kv', 'readonly').objectStore('kv').get(key);
+      req.onsuccess = e => res(e.target.result ?? null);
+      req.onerror   = () => res(null);
+    });
+  } catch { return null; }
+}
+
+// ── UI HELPERS ───────────────────────────────────────────────────────────────
+
+function setStatus(text, color) {
+  const el = document.getElementById('status');
+  el.textContent = text;
+  el.style.color = color;
+}
+
+function lockUI(busy) {
+  ['btn-send', 'btn-shot', 'btn-delete', 'btn-final'].forEach(id => {
+    document.getElementById(id).disabled = busy;
+  });
+  if (!busy) {
+    document.getElementById('btn-shot').disabled   = !dirHandle;
+    document.getElementById('btn-final').disabled  = !dirHandle;
+    document.getElementById('btn-send').disabled   = screenshots.length === 0;
+    document.getElementById('btn-delete').disabled = screenshots.length === 0;
+  }
+}
+
+function toggleApiPanel() {
+  const p = document.getElementById('api-panel');
+  p.classList.toggle('open');
+  if (p.classList.contains('open') && apiKey) {
+    document.getElementById('api-input').value = apiKey;
+  }
+}
+
+function saveApiKey() {
+  const val = document.getElementById('api-input').value.trim();
+  if (val) {
+    apiKey = val;
+    localStorage.setItem('ew-api-key', val);
+    document.getElementById('api-panel').classList.remove('open');
+  }
+}
+
+function savePrefs() {
+  compressImages = document.getElementById('chk-compress').checked;
+  localStorage.setItem('ew-compress', compressImages);
+}
+
+function checkApiKey() {
+  if (!apiKey) {
+    toggleApiPanel();
+    document.getElementById('api-input').focus();
+    return false;
+  }
+  return true;
+}
+</script>
+</body>
+</html>

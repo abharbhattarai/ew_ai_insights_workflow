@@ -1,0 +1,18 @@
+# Environment / secrets
+.env
+*.env
+
+# Prompt files (kept local, never committed)
+prompt_system.txt
+prompt_batch.txt
+prompt_final_report.txt
+
+# Output files (stay on your machine)
+batch_*/
+FINAL_REPORT_*.docx
+memory.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
