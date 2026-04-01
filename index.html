@@ -96,26 +96,40 @@
     .btn-big span { font-size: 15px; }
 
     /* ── FOLDER SECTION ─────────────────────────────────────── */
+    #folder-section {
+      min-width: 210px;
+      max-width: 240px;
+      align-items: stretch;
+      gap: 4px;
+    }
+
+    #btn-folder { width: 100%; text-align: center; }
+
     #folder-name {
       font-size: 10px;
       color: var(--red);
-      max-width: 155px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       text-align: center;
+      letter-spacing: 0.2px;
     }
     #folder-name.ok { color: var(--green); }
+
+    #status-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      flex-wrap: nowrap;
+    }
 
     .mini-status {
       font-size: 9px;
       color: var(--fg2);
-      text-align: center;
-      max-width: 155px;
-      overflow: hidden;
-      text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .mini-dot { font-size: 7px; color: var(--sep); }
     #key-status { cursor: pointer; }
     #key-status:hover { opacity: 0.75; }
 
@@ -185,17 +199,17 @@
     #api-panel {
       display: none;
       position: fixed;
-      top: calc(var(--bar-h) + 8px);
+      top: calc(var(--bar-h) + 6px);
       left: 8px;
       background: var(--bg-el);
       border: 1px solid var(--sep);
       border-radius: 6px;
-      padding: 14px;
+      padding: 10px;
       z-index: 9998;
       flex-direction: column;
-      gap: 8px;
-      min-width: 340px;
-      box-shadow: 0 4px 20px rgba(0,0,0,.6);
+      gap: 6px;
+      width: 280px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.6);
     }
     #api-panel.open { display: flex; }
     #api-panel input {
@@ -203,13 +217,13 @@
       color: var(--fg);
       border: 1px solid var(--sep);
       border-radius: 4px;
-      padding: 7px 10px;
-      font-size: 12px;
+      padding: 5px 8px;
+      font-size: 11px;
       font-family: monospace;
       width: 100%;
     }
     #api-panel input:focus { outline: 1px solid var(--blue); }
-    .api-note { font-size: 10px; color: var(--fg2); line-height: 1.6; }
+    .api-note { font-size: 9px; color: var(--fg2); line-height: 1.5; }
 
     /* ── COMPAT ERROR ───────────────────────────────────────── */
     #compat-error {
@@ -240,16 +254,18 @@
 <div id="bar">
 
   <!-- 1. PROJECT FOLDER -->
-  <div class="section" style="min-width:165px;">
-    <button id="btn-folder" style="width:145px;">Select Folder</button>
-    <div id="folder-name">Not selected</div>
-    <div class="row" style="gap:8px;">
-      <div id="prompt-status" class="mini-status">✗ Prompts</div>
-      <div id="key-status"    class="mini-status" title="Click to set API key">✗ Key</div>
-      <label class="row" style="font-size:9px; color:var(--fg2); cursor:pointer; gap:3px;">
+  <div class="section" id="folder-section">
+    <button id="btn-folder">📁 Select Folder</button>
+    <div id="folder-name">No folder selected</div>
+    <div id="status-row">
+      <span id="prompt-status" class="mini-status">✗ Prompts</span>
+      <span class="mini-dot">●</span>
+      <span id="key-status" class="mini-status" title="Click to update API key">✗ Key</span>
+      <span class="mini-dot">●</span>
+      <label style="display:flex; align-items:center; gap:3px; font-size:9px; color:var(--fg2); cursor:pointer;">
         <input type="checkbox" id="chk-compress"> Compress
       </label>
-      <button id="btn-install">📌</button>
+      <button id="btn-install" title="Install as app">📌</button>
     </div>
   </div>
 
@@ -458,7 +474,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!apiKey) toggleApiPanel();
 
   // Wire up all buttons
-  document.getElementById('btn-folder').addEventListener('click', selectFolder);
+  // btn-folder uses .onclick (not addEventListener) to allow swapping the handler
+  // cleanly in activateFolder() and resetFolderBtn() without double-firing
+  document.getElementById('btn-folder').onclick = selectFolder;
   document.getElementById('btn-shot').addEventListener('click', takeScreenshot);
   document.getElementById('btn-send').addEventListener('click', sendToAI);
   document.getElementById('btn-delete').addEventListener('click', deleteLastScreenshot);
