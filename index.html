@@ -24,7 +24,7 @@
       --blue:    #2196F3;
       --orange:  #FFA726;
       --sep:     #3a3a3a;
-      --bar-h:   70px;
+      --bar-h:   96px;
     }
 
     body {
@@ -97,13 +97,14 @@
 
     /* ── FOLDER SECTION ─────────────────────────────────────── */
     #folder-section {
-      min-width: 210px;
-      max-width: 240px;
+      width: 182px;
+      flex-shrink: 0;
       align-items: stretch;
-      gap: 4px;
+      gap: 3px;
+      overflow-x: hidden;
     }
 
-    #btn-folder { width: 100%; text-align: center; }
+    #btn-folder { width: 100%; }
 
     #folder-name {
       font-size: 10px;
@@ -112,26 +113,28 @@
       text-overflow: ellipsis;
       white-space: nowrap;
       text-align: center;
-      letter-spacing: 0.2px;
     }
     #folder-name.ok { color: var(--green); }
 
-    #status-row {
+    .mini-status {
+      font-size: 9px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: center;
+      width: 100%;
+    }
+
+    #prompt-status { color: var(--fg2); }
+    #key-status { cursor: pointer; color: var(--fg2); }
+    #key-status:hover { opacity: 0.75; }
+
+    #key-compress-row {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 5px;
-      flex-wrap: nowrap;
+      gap: 8px;
     }
-
-    .mini-status {
-      font-size: 9px;
-      color: var(--fg2);
-      white-space: nowrap;
-    }
-    .mini-dot { font-size: 7px; color: var(--sep); }
-    #key-status { cursor: pointer; }
-    #key-status:hover { opacity: 0.75; }
 
     .row { display: flex; align-items: center; gap: 6px; }
 
@@ -257,15 +260,10 @@
   <div class="section" id="folder-section">
     <button id="btn-folder">📁 Select Folder</button>
     <div id="folder-name">No folder selected</div>
-    <div id="status-row">
-      <span id="prompt-status" class="mini-status">✗ Prompts</span>
-      <span class="mini-dot">●</span>
-      <span id="key-status" class="mini-status" title="Click to update API key">✗ Key</span>
-      <span class="mini-dot">●</span>
-      <label style="display:flex; align-items:center; gap:3px; font-size:9px; color:var(--fg2); cursor:pointer;">
-        <input type="checkbox" id="chk-compress"> Compress
-      </label>
-      <button id="btn-install" title="Install as app">📌</button>
+    <span id="prompt-status" class="mini-status">Prompts: select a folder</span>
+    <div id="key-compress-row">
+      <span id="key-status" class="mini-status" title="Click to update API key">Key: not set</span>
+      <button id="btn-install" title="Install as app" style="padding:2px 5px; font-size:9px;">📌</button>
     </div>
   </div>
 
@@ -277,6 +275,9 @@
       <div class="dot" id="cap-dot"></div><span>📷</span>SCREENSHOT
     </button>
     <span id="cap-label" style="font-size:8px; color:var(--fg2);">No capture</span>
+    <label style="display:flex; align-items:center; gap:3px; font-size:9px; color:var(--fg2); cursor:pointer; white-space:nowrap;">
+      <input type="checkbox" id="chk-compress"> Compress
+    </label>
   </div>
 
   <div class="vsep"></div>
@@ -345,7 +346,22 @@ let BATCH_PROMPT        = '';
 let FINAL_REPORT_PROMPT = '';
 
 async function loadPrompts(handle) {
-  // Each prompt is tried as .docx first, then .txt fallback
+  const el = document.getElementById('prompt-status');
+  const setStatus = (msg, color) => { el.textContent = msg; el.style.color = color; };
+
+  if (!window.mammoth) {
+    setStatus('⚠ mammoth not loaded', 'var(--red)');
+    return;
+  }
+
+  let configHandle;
+  try {
+    configHandle = await handle.getDirectoryHandle('_config');
+  } catch {
+    setStatus('⚠ no _config/ folder', 'var(--orange)');
+    return;
+  }
+
   const files = {
     system:      'prompt_system',
     batch:       'prompt_batch',
@@ -353,20 +369,28 @@ async function loadPrompts(handle) {
   };
 
   const loaded = {};
+  let parseError = null;
+
   for (const [key, base] of Object.entries(files)) {
     for (const ext of ['docx', 'txt']) {
+      let fh;
+      try { fh = await configHandle.getFileHandle(`${base}.${ext}`); }
+      catch { continue; } // not found — try next extension
+
       try {
-        const fh   = await handle.getFileHandle(`${base}.${ext}`);
         const file = await fh.getFile();
         if (ext === 'docx') {
           const buf    = await file.arrayBuffer();
-          const result = await mammoth.extractRawValue({ arrayBuffer: buf });
-          loaded[key]  = result.value.trim();
+          const result = await window.mammoth.convertToHtml({ arrayBuffer: buf });
+          loaded[key]  = result.value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
         } else {
           loaded[key] = (await file.text()).trim();
         }
-        break; // found one — stop trying
-      } catch { /* try next extension */ }
+        break;
+      } catch (e) {
+        parseError = e.message;
+        console.warn(`loadPrompts: failed to parse ${base}.${ext}:`, e);
+      }
     }
   }
 
@@ -374,16 +398,13 @@ async function loadPrompts(handle) {
   BATCH_PROMPT        = loaded.batch       || '';
   FINAL_REPORT_PROMPT = loaded.finalReport || '';
 
-  const allLoaded = !!(SYSTEM_PROMPT && BATCH_PROMPT && FINAL_REPORT_PROMPT);
-  const el = document.getElementById('prompt-status');
-  if (allLoaded) {
-    el.textContent = '✓ Prompts';
-    el.style.color = 'var(--green)';
+  if (SYSTEM_PROMPT && BATCH_PROMPT && FINAL_REPORT_PROMPT) {
+    setStatus('✓ Prompts loaded', 'var(--green)');
+  } else if (parseError) {
+    setStatus(`⚠ parse err: ${parseError}`, 'var(--red)');
   } else {
-    const missing = Object.entries(files)
-      .filter(([k]) => !loaded[k]).map(([, v]) => v).join(', ');
-    el.textContent = `⚠ Missing: ${missing}`;
-    el.style.color = 'var(--orange)';
+    const n = [SYSTEM_PROMPT, BATCH_PROMPT, FINAL_REPORT_PROMPT].filter(Boolean).length;
+    setStatus(`⚠ ${n}/3 prompts found`, 'var(--orange)');
   }
 }
 
@@ -391,7 +412,8 @@ async function loadPrompts(handle) {
 
 async function loadEnv(handle) {
   try {
-    const fh   = await handle.getFileHandle('.env');
+    const configHandle = await handle.getDirectoryHandle('_config');
+    const fh   = await configHandle.getFileHandle('.env');
     const file = await fh.getFile();
     const text = await file.text();
     const match = text.match(/ANTHROPIC_API_KEY\s*=\s*["']?([^\s"']+)["']?/);
@@ -438,7 +460,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // PWA: auto-position as a bar when running as installed standalone app
   if (window.matchMedia('(display-mode: standalone)').matches) {
-    const barH = 70;
+    const barH = 96;
     window.moveTo(screen.availLeft || 0, screen.availTop || 0);
     window.resizeTo(screen.availWidth, barH + 30); // +30 for OS title bar
   }
@@ -459,7 +481,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (perm === 'granted') {
         await activateFolder(stored);
       } else {
-        setFolderLabel('↻ ' + stored.name, false);
+        setFolderLabel('↻ ' + stored.name + ' (reconnect)', false);
         document.getElementById('btn-folder').textContent = 'Reconnect';
         document.getElementById('btn-folder').onclick = async () => {
           try {
@@ -510,9 +532,10 @@ async function selectFolder() {
 
 async function activateFolder(handle) {
   dirHandle = handle;
-  setFolderLabel('.../' + handle.name, true);
+  intermediateHandle = null;
+  setFolderLabel(handle.name, true);
   const btn = document.getElementById('btn-folder');
-  btn.textContent = '✓ Change';
+  btn.textContent = '📁 Parent Dir';
   btn.onclick = selectFolder;
 
   // Load prompts and .env key from the folder
@@ -522,7 +545,6 @@ async function activateFolder(handle) {
   if (!keyFromEnv && !apiKey) setKeyStatus('⚠ Key not set', 'var(--orange)');
 
   await calcBatchCounter();
-  await createBatchFolder();
 
   document.getElementById('btn-shot').disabled  = false;
   document.getElementById('btn-final').disabled = false;
@@ -530,25 +552,40 @@ async function activateFolder(handle) {
 
 function setFolderLabel(text, ok) {
   const el = document.getElementById('folder-name');
-  el.textContent = text;
+  el.textContent = ok ? `Dir: ${text}` : text;
   el.className = ok ? 'ok' : '';
+}
+
+let intermediateHandle = null;
+
+async function ensureIntermediateHandle() {
+  if (!intermediateHandle) {
+    intermediateHandle = await dirHandle.getDirectoryHandle('Intermediate outputs', { create: true });
+  }
+  return intermediateHandle;
 }
 
 async function calcBatchCounter() {
   let max = 0;
-  for await (const entry of dirHandle.values()) {
-    if (entry.kind === 'directory' && entry.name.startsWith('batch_')) {
-      const n = parseInt(entry.name.split('_')[1], 10);
-      if (!isNaN(n)) max = Math.max(max, n);
+  try {
+    // peek without creating — if folder doesn't exist yet, start from 1
+    const ih = await dirHandle.getDirectoryHandle('Intermediate outputs');
+    for await (const entry of ih.values()) {
+      if (entry.kind === 'directory' && entry.name.startsWith('batch_')) {
+        const n = parseInt(entry.name.split('_')[1], 10);
+        if (!isNaN(n)) max = Math.max(max, n);
+      }
     }
-  }
+  } catch { /* "Intermediate outputs" not yet created — fine, start from 1 */ }
   batchCounter = max + 1;
 }
 
 async function createBatchFolder() {
+  console.trace('createBatchFolder called');
+  const ih   = await ensureIntermediateHandle();
   const ts   = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
   const name = `batch_${batchCounter}_${ts}`;
-  batchHandle = await dirHandle.getDirectoryHandle(name, { create: true });
+  batchHandle = await ih.getDirectoryHandle(name, { create: true });
   batchCounter++;
 }
 
@@ -614,6 +651,7 @@ async function takeScreenshot() {
     }
 
     const blob  = await canvasToBlob(final);
+    if (!batchHandle) await createBatchFolder();
     shotCounter++;
     const fname = `screenshot_${String(shotCounter).padStart(3, '0')}.png`;
     await saveFile(batchHandle, fname, blob);
@@ -709,9 +747,8 @@ async function sendToAI() {
     });
     await saveFile(batchHandle, 'ai_analysis.docx', docBlob);
 
-    screenshots = []; shotCounter = 0;
+    screenshots = []; shotCounter = 0; batchHandle = null;
     renderGrid();
-    await createBatchFolder();
     setStatus('✓ Saved!', 'var(--green)');
     document.getElementById('btn-send').disabled   = true;
     document.getElementById('btn-delete').disabled = true;
@@ -734,8 +771,9 @@ async function generateFinalReport() {
     return;
   }
 
+  const ih = await ensureIntermediateHandle();
   const batches = [];
-  for await (const entry of dirHandle.values()) {
+  for await (const entry of ih.values()) {
     if (entry.kind === 'directory' && entry.name.startsWith('batch_')) {
       try {
         const dh = await entry.getFileHandle('ai_analysis.docx');
@@ -759,10 +797,8 @@ async function generateFinalReport() {
     for (const { name, handle } of batches) {
       const file   = await handle.getFile();
       const buf    = await file.arrayBuffer();
-      const result = await mammoth.extractRawValue({ arrayBuffer: buf });
-      const lines  = result.value.split('\n');
-      const start  = lines.findIndex(l => l.includes('Response:'));
-      const body   = (start >= 0 ? lines.slice(start + 1) : lines).filter(l => l.trim()).join('\n');
+      const result = await window.mammoth.convertToHtml({ arrayBuffer: buf });
+      const body   = result.value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       if (body) sections.push(`=== ${name} ===\n${body}`);
     }
 
