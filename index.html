@@ -615,7 +615,7 @@ async function ensureStream() {
 }
 
 async function takeScreenshot() {
-  if (!dirHandle || !batchHandle) { alert('Select a project folder first.'); return; }
+  if (!dirHandle) { alert('Select a project folder first.'); return; }
 
   const ok = await ensureStream();
   if (!ok) return;
